@@ -1,19 +1,26 @@
-# Proyecto IoT: ESP32 LED RGB con MQTT y Servidor Web
-**Autores:**   Edward Fabian Goyeneche Velandia / Juan Sebastian Giraldo Duque  
+# ESP32C6 Parking Monitor
 
-**Nombre de la Práctica:** Proyecto IoT: ESP32 LED RGB con MQTT y Servidor Web  
+**Autor:** Felipe Idárraga Quintero
 
-**Curso:**  Desarrollo de Sistemas IoT 
+**Nombre de la Práctica:** Práctica 1
 
-**Departamento:**  Departamento de Ingeniería Electrica, Electronica y Computacion  
+**Curso:** Desarrollo de Sistemas IoT
 
-**Universidad:**  Universida Nacional de Colombia - Sede Manizales 
+**Departamento:** Departamento de Ingeniería Electrica, Electronica y Computacion
 
 ---
-Esta es la guia para realizar la demo de  un sistema Iot basico donde un ESP32-C6 controla un LED RGB (LED interno) que cambia de colores cada 3 segundos, envía la información por MQTT a un servidor en AWS EC2, y una página web muestra los cambios de color en tiempo real.
 
+## Descripción de la práctica
 
-##  Componentes de la Demo
+Este repositorio contiene una práctica titulada **ESP32C6 Parking Monitor**, cuyo objetivo es implementar un sistema básico de monitoreo de parqueaderos usando un **ESP32-C6**. 
+
+En este proyecto los sensores de parqueo no son físicos, sino que se simulan en el firmware: el ESP32-C6 genera de forma aleatoria (con una probabilidad configurada) si cada puesto está libre u ocupado, imitando la entrada y salida de vehículos. Estos estados se envían por MQTT y se muestran en una página web sencilla que permite ver en tiempo real la ocupación del parqueadero.
+
+Este trabajo es una adaptación del proyecto original **“Proyecto IoT: ESP32 LED RGB con MQTT y Servidor Web”** de los autores **Edward Fabian Goyeneche Velandia** y **Juan Sebastian Giraldo Duque**, que se encuentra en https://github.com/Edward1304/Demo_IoT_MQTT_SERVER. 
+
+A partir de esa base se realizaron cambios en la lógica, en el manejo de MQTT y en la interfaz web para orientarlo al monitoreo de parqueaderos con ESP32-C6 y sensores simulados.
+
+## Componentes de la práctica
 
 - **ESP32-C6-DevKitC-1 v1.2** con LED RGB WS2812 integrado
 - **Servidor AWS EC2** con Ubuntu
@@ -21,129 +28,122 @@ Esta es la guia para realizar la demo de  un sistema Iot basico donde un ESP32-C
 - **Servidor Web Apache** 
 - **Página Web** con visualización en tiempo real
 
-##  Arquitectura de la Demo
+##  Arquitectura IoT
 
-```
-ESP32-C6 ──(WiFi)──> Internet ──> AWS EC2 Server
-    │                                │
-    └─ LED RGB WS2812               ├─ Mosquitto MQTT (puerto 1883)
-                                    ├─ WebSocket MQTT (puerto 9001)
-                                    └─ Apache Web (puerto 80)
-                                           └─ Página Web
-```
+![parking_monitor (2)](https://github.com/user-attachments/assets/ab077ebc-2ec0-4298-a759-c949b297178a)
 
----
+En la arquitectura IoT, el ESP32-C6 actúa como cliente MQTT conectado por WiFi al router, el cual da acceso a un servidor AWS EC2 que aloja el broker Mosquitto y el servidor web Apache2. El dashboard web se sirve vía HTTP y se comunica en tiempo real con el broker mediante MQTT sobre WebSocket
 
-#  Guía  Paso a Paso
+## Implementación del sistema
 
-## Parte 1: Configuración del Servidor AWS EC2
+### 1. Creación y configuración del servidor EC2 en AWS
 
-### 1. Crear Instancia EC2
+**1.1 Creación de la cuenta y acceso a EC2**
 
-#### 1.1 **Acceder a AWS Console**:
-   - Ve a [AWS Console](https://aws.amazon.com/console/)
-   - Navega a **EC2 > Instances**
+Primero, ingresa a **Amazon Web Services (AWS)** y crea una cuenta (puede ser con la capa gratuita).  
+Luego accede a la **AWS Management Console** y, en la barra de búsqueda, escribe **“EC2 (Amazon Elastic Compute Cloud)”**. 
 
-  ![AWS EC2 Instance](./img/1.png)
+![AWS EC2 Instance](./img/1.png)
 
-#### 1.2 **Lanzar Nueva Instancia**:
-   - Click en **"Launch Instance"**
-   
-  ![Lanzar instancia](./img/2.png)
+Dentro del servicio EC2 selecciona la opción **“Launch instance”** para crear una nueva instancia.
 
+![Lanzar instancia](./img/2.png)
 
+**1.2 Configuración de la instancia EC2**
 
-   - **Name**: `esp-webserver`
+Al crear la instancia, se le puede asignar un nombre descriptivo, por ejemplo **esp-webserver**.  
+Como **Amazon Machine Image (AMI)** se selecciona **Ubuntu Server 22.04 LTS**, y como **Instance Type** se elige **t3.micro**, que es compatible con la capa gratuita de AWS y suficiente para alojar el broker MQTT (Mosquitto) y el servidor web (Apache2) de esta práctica.
 
-   ![Nombre server](./img/3.png)
+![Nombre server](./img/3.png)
 
-   - **AMI**: Ubuntu Server 22.04 LTS (Free tier eligible)
-   - **Instance Type**: t2.micro (Free tier eligible)
+**1.3 Configuración del grupo de seguridad (Security Group)**
 
-#### 1.3 **Configurar Security Groups**:
-   - **SSH (22)**: Tu IP (para acceso remoto)
-   - **HTTP (80)**: 0.0.0.0/0 (para la página web)
+En **Network settings**, selecciona la opción **“Create security group”** y configura las siguientes reglas de entrada:
 
-  ![Grupo de seguridad 1](./img/4.png)
+- **SSH** desde `0.0.0.0/0`: permite conectarse por SSH a la instancia desde cualquier dirección IP.  
 
-   - **MQTT (1883)**: 0.0.0.0/0 (para el ESP32)
-   - **WebSocket (9001)**: 0.0.0.0/0 (para la página web)
+- **HTTP** desde Internet: permite acceder al servidor web por el puerto 80.
 
-   ![Grupo de seguridad 2](./img/5.png)
+- **HTTPS** desde Internet: permite acceder por el puerto 443 (si se desea acceder al servidor web por este puerto).
 
-   ![Grupo de seguridad 3](./img/6.png)
+![Grupo de seguridad 1](./img/4.png)
 
-#### 1.4 **Configurar Key Pair**:
+A continuación, haz clic en **“Add security group rule”** para agregar los puertos necesarios para MQTT:
 
-  ![Key-par 1](./img/7.png)
-   - Crear nuevo Key Pair o usar existente
+- **Puerto 1883 (TCP)**: se utiliza para la conexión MQTT del **ESP32-C6** hacia el broker Mosquitto.
+- **Puerto 9001 (TCP)**: se utiliza para la conexión del **dashboard web** mediante **MQTT sobre WebSocket**.
 
+En ambos casos se puede dejar el origen como `0.0.0.0/0` para permitir el acceso desde cualquier IP
 
-   ![Key-par 2](./img/8.png)
+![Grupo de seguridad 2](./img/5.png)
 
+![Grupo de seguridad 3](./img/6.png)
 
+**1.4 Configuración del par de claves (Key pair)**
 
-   - Descargar archivo `.pem` para acceso SSH
+En el apartado **“Key pair (login)”** se debe crear o seleccionar un **par de claves (key pair)**. 
 
+Un key pair es un mecanismo de autenticación que utiliza una **clave pública** (que queda almacenada en la instancia EC2) y una **clave privada** (que se descarga en tu computador) para permitir el acceso seguro por SSH, sin necesidad de usar una contraseña.
 
-   ![Key-par 3](./img/10.png)
+Al crear un nuevo key pair, AWS generará un archivo con extensión **`.pem`**, el cual se descargará automaticamente y se debe guardar en un lugar seguro.  
 
+Este archivo `.pem` será necesario si se va a acceder a la instancia EC2 como cliente **SSH** desde **Windows PowerShell** (o desde cualquier otro cliente SSH).
 
-#### 1.5 **Lanzar Instancia** y anotar la **IP pública**
+![Key-par 1](./img/7.png)
+
+ ![Key-par 2](./img/8.png)
+
+ ![Key-par 3](./img/10.png)
+
+**1.5 Inicio de la instancia**
+
+Finalmente, después de revisar la configuración anterior, se hace clic en **“Launch instance”** para crear la máquina virtual.  
 
 ![Launch instance 1](./img/9.png)
 
-![Launch instance 2](./img/11.png)
+Luego, en la sección “Instances”, se selecciona (se marca) la instancia creada y, si es necesario, se elige la opción **“Instance state” → “Start instance”** para asegurarse de que esté encendida
 
+Desde el panel de EC2 se verifica que el estado de la instancia cambie a **“running”**, lo que indica que el servidor está encendido y listo para aceptar conexiones.
 
-# Parte 2: Conectar al Servidor
-Abrir la ruta donde se guardó el archivo  `.pem` para acceso SSH y ejecutar los siguientes comandos
-```bash
-# Cambiar permisos del archivo .pem
-chmod 400 key-descargada.pem
+<img width="1919" height="500" alt="image" src="https://github.com/user-attachments/assets/40e76b7d-0bcd-4df7-8daa-f9421dff43d0" />
 
-# Conectar por SSH
-ssh -i key-descargada.pem ubuntu@IP_PUBLICA_SERVER
-```
+Una vez la instancia está en ejecución, ya es posible acceder por **SSH** al servidor y continuar con la configuración del **broker MQTT (Mosquitto)** dentro de esta máquina virtual.
+
+## 2. Configuración del broker MQTT y Apache2 dentro del servidor AWS (EC2)
+
+**2.1 Acceso por SSH a la instancia EC2**
+
+Desde **Windows**, abre **PowerShell** en la carpeta donde guardaste el archivo `.pem` del key pair. 
+
 ![ssh connect](./img/12.png)
+
+Una vez la instancia está en estado **“running”**, en el panel de EC2 se hace clic en el botón **“Connect”**.  
+En la ventana que se abre, se selecciona la opción **“SSH client”** y, en la parte inferior, en la sección **“Example”**, aparece el comando completo para conectarse por SSH a la instancia. Es un comando similar a:
+
+```bash
+ssh -i "NOMBRE_DE_TU_CLAVE.pem" ubuntu@IP_PUBLICA_DE_LA_INSTANCIA
+```
+
 ![ip-public](./img/13.png)
+
 ![ip-public](./img/14.png)
+
+Este comando se debe copiar y ejecutar en Windows PowerShell, ubicándose primero en la carpeta donde se encuentra el archivo .pem.
+
 ![ip-public](./img/15.png)
+
+De esta forma, se establece la conexión SSH con el servidor Ubuntu que está corriendo en la instancia EC2.
+
 ![ip-public](./img/16.png)
 
-## **2 Actualizar Sistema**
-
-#### **2.1 instalar apache**
-
-Si aún no  se tiene Apache instalado, se puede hacer  usando el gestor de paquete apt, abriendo  una terminal y ejecutar estos comandos
-
+**2.2 Instalación de apache2**
 
 ```bash
 sudo apt update
 sudo apt install apache2
 ```
 
-Una vez instalado, Apache debería iniciarse automáticamente, y su página de inicio predeterminada estará disponible en tu servidor.
-
-#### **2.2 Crear la estructura de directorios**
-
-Por convención, las páginas web se almacenan en el directorio **/var/www/hmtl**. se puede utilizar este directorio para uba página web sencilla. Puedes crear un directorio para el sitio y cambiar los permisos para que puedas editar los archivos:
-
-```bash
-sudo mkdir /var/www/html/mi-sitio
-sudo chown -R tu_usuario:tu_usuario /var/www/html/mi-sitio
-```
-
-Reemplaza **`tu_usuario`** con tu nombre de usuario.
-
-
-![sitio](./img/17.png)
-
-
-
-#### **2.3 Comprobar el Estado del Servidor**
-
-Se debe asegúrar de que Apache esté en ejecución. Puedes verificar su estado con el siguiente comando:
+Se debe asegúrar de que Apache esté en ejecución. Puede verificar su estado con el siguiente comando:
 
 ```bash
 
@@ -161,22 +161,9 @@ sudo systemctl start apache2
 
 ```
 
-#### **2.4 Accede a tu página web**
-Ahora, puedes acceder a la página web en un navegador web utilizando la dirección IP del servidor. 
+**2.3 Instalación de Mosquitto**
 
-![Untitled](./img/19.png)
-
-![Untitled](./img/20.png)
-
-**Importante:** El servidor predeterminado no admite HTTPS, así que asegúrese de iniciar sesión mediante HTTP.
-
-![Untitled](./img/21.png)
-
-### Mosquitto Server. (MQTT)
-
-Para crear un servidor MQTT en Ubuntu, se puede  utilizar el popular servidor MQTT llamado Mosquitto. Mosquitto es de código abierto y ampliamente utilizado en la comunidad de IoT y desarrollo de aplicaciones que requieren comunicación de mensajes entre dispositivos.   asi de debe de instalar y configurar Mosquitto en Ubuntu:
-
-#### Paso 1: Instalar Mosquitto
+Los siguientes comandos actualizarán la lista de paquetes disponibles y luego instalarán el servidor Mosquitto y la utilidad de línea de comandos Mosquitto Clients.
 
 ```bash
 
@@ -184,13 +171,6 @@ sudo apt update
 sudo apt install mosquitto mosquitto-clients
 
 ```
-
-Abrir una terminal y ejecuta los siguientes comandos para instalar Mosquitto en el sistema:
-
-Estos comandos actualizarán la lista de paquetes disponibles y luego instalarán el servidor Mosquitto y la utilidad de línea de comandos Mosquitto Clients.
-
-#### Paso 2: Iniciar y Habilitar el Servicio
-
 Una vez que Mosquitto esté instalado, se puede habilitar el servicio y se debe de asegurar de que se inicie automáticamente al arrancar el sistema con los siguientes comandos:
 
 ```bash
@@ -199,8 +179,6 @@ sudo systemctl enable mosquitto
 sudo systemctl start mosquitto
 
 ```
-
-#### Paso 3: Comprobar el Estado del Servidor
 
 Para verificar si Mosquitto se está ejecutando correctamente ejecutando el siguiente comando:
 
@@ -214,9 +192,12 @@ Se deberia ver un mensaje que indique que el servicio está activo y en funciona
 
 ![Untitled](./img/22.png)
 
-#### Paso 4: Configurar el Servidor (Opcional)
+**2.4 Configuración de los puertos 1883 y 9001 (WebSocket)**
 
-La configuración predeterminada de Mosquitto generalmente es suficiente para un uso básico. Sin embargo, si  se desea personalizar la configuración, se puede editar el archivo de configuración principal de Mosquitto:
+Por defecto, Mosquitto suele escuchar en el puerto 1883 (MQTT sobre TCP).
+Para esta práctica también se configurará el puerto 9001 para MQTT sobre WebSocket, que usará el dashboard web.
+
+Primero, se edita el archivo de configuración (por ejemplo):
 
 ```bash
 
@@ -224,22 +205,23 @@ sudo nano /etc/mosquitto/conf.d/mosquitto.conf
 
 ```
 
-Realiza las modificaciones que desees y guarda el archivo.
+Y se agrega el siguiente contenido básico:
 
 ```bash
+
+# Listener MQTT normal (ESP32-C6)
 listener 1883
 protocol mqtt
 
+# Listener MQTT sobre WebSocket (dashboard web)
 listener 9001
 protocol websockets
 
-password_file /etc/mosquitto/passwd
-allow_anonymous false
 ```
 
-![Untitled](./img/23.png)
+Se guarda el archivo (Ctrl + O, Enter) y se sale del editor (Ctrl + X).
 
-#### **2.5 Crear un archivo de contraseñas:**
+**2.5 Crear un archivo de contraseñas:**
 
 - Abrir una terminal y ejecuta el siguiente comando para crear un archivo que almacene los usuarios y contraseñas:
 
@@ -258,7 +240,9 @@ sudo chown mosquitto:mosquitto /etc/mosquitto/passwd
 sudo chmod 640 /etc/mosquitto/passwdclear
 ```
 
-#### **2.6 Reiniciar el servidor Mosquitto para que los cambios surtan efecto:**
+**2.6 Reiniciar el servidor Mosquitto para que los cambios surtan efecto:**
+
+Finalmente, se reinicia Mosquitto para que tome la nueva configuración:
 
 ```bash
 
@@ -268,7 +252,13 @@ sudo systemctl restart mosquitto
 
 Ahora, cuando te conectes al servidor MQTT Mosquitto, deberás proporcionar un nombre de usuario y contraseña válidos para autenticarte.
 
-#### **2.7 Prueba el Servidor**
+En este punto, el servidor AWS EC2 ya tiene un broker MQTT escuchando en:
+
+- 1883/TCP para el ESP32-C6.
+
+- 9001/TCP (WebSocket) para el dashboard web.
+
+**2.7 Prueba el Servidor**
 
 Puedes utilizar el cliente Mosquitto para probar la funcionalidad del servidor MQTT. Abre una terminal y utiliza el siguiente comando para suscribirte a un tema y ver los mensajes que llegan:
 
@@ -285,17 +275,25 @@ Abrir otra terminal y publica un mensaje en el mismo tema:
 
 mosquitto_pub -h localhost -t test -m "Hola, MQTT!" -u esp32 -P esp32
 
+#
+
 ```
 
 Deberías ver el mensaje "Hola, MQTT!" en la terminal donde te suscribiste al tema.
 
-### Test Client MQTT.
+## 3. Creación del dashboard web
 
-![Untitled](./img/25.png)
-![Untitled](./img/26.png)
+Por convención, las páginas web se almacenan en el directorio **/var/www/hmtl**. se puede utilizar este directorio para una página web sencilla. Lo mejor es crear un directorio para el sitio y cambiar los permisos para que se pueda editar los archivos:
+
+```bash
+sudo mkdir /var/www/html/
+sudo chown -R tu_usuario:tu_usuario /var/www/html/
+```
+
+Reemplaza **`tu_usuario`** con su nombre de usuario.
 
 
-## Parte 3: Moficacion del archivo index.html
+![sitio](./img/17.png)
 
 Para  la aplicacion a desarrollar  se debe colocar este  codigo HTML de la parte web para  vizualizacion  de la informacion, este se coloca en la siguiente ruta:
 
@@ -304,15 +302,21 @@ Para  la aplicacion a desarrollar  se debe colocar este  codigo HTML de la parte
 sudo nano /var/www/html/index.html
 
 ```
+
 **Contenido del archivo:**
 ```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>ESP32 LED Monitor</title>
+  <title>Monitor de Parqueadero IoT</title>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 40px;
+    }
+
     #circle {
       width: 120px;
       height: 120px;
@@ -322,39 +326,98 @@ sudo nano /var/www/html/index.html
       box-shadow: 0 0 20px #888;
       transition: background 0.5s;
     }
+
     #status {
       margin: 20px 0;
       font-weight: bold;
     }
+
     .connected { color: green; }
     .disconnected { color: red; }
     .connecting { color: orange; }
+
+    #summary {
+      margin: 15px 0;
+    }
+
+    #parkingContainer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .spot {
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      color: #000;
+    }
+
+    .spot.free {
+      background-color: #8cff8c; /* verde claro */
+    }
+
+    .spot.occupied {
+      background-color: #ff7b7b; /* rojo claro */
+    }
+
+    .spot span {
+      font-size: 12px;
+      font-weight: normal;
+    }
   </style>
 </head>
 <body>
-  <h2>ESP32 LED Monitor</h2>
+  <h2>Monitor de Parqueadero IoT - ESP32-C6</h2>
+
+  <!-- Indicador global tipo semáforo -->
   <div id="circle"></div>
+
   <div id="status" class="connecting">Conectando a MQTT...</div>
-  <div>Color actual: <span id="colorText">---</span></div>
-  <div>Mensajes recibidos: <span id="messageCount">0</span></div>
+
+  <div id="summary">
+    Estado global: <span id="globalState">---</span><br>
+    Plazas ocupadas: <span id="occupiedCount">0</span> /
+    <span id="totalSpots">0</span><br>
+    Mensajes recibidos: <span id="messageCount">0</span>
+  </div>
+
+  <!-- Contenedor de las plazas -->
+  <div id="parkingContainer"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
   <script>
     window.onload = function() {
       const brokerHost = "IP_PUBLICA_SERVER"; // CAMBIAR  LA IP
-      const brokerPort = 9001;
-      const topic = "esp32/led";
-      const username = "esp32";
-      const password = "12345678";
+      const brokerPort = 9001;           // Puerto WebSocket
+      const topic = "esp32/parking";     // 🔹 NUEVO TOPIC
+      const username = "esp32"; //COLOCAR TU USUARIO PARA ACCESO MQTT
+      const password = "esp32"; //COLOCAR TU CONTRASEÑA PARA ACCESO MQTT
 
-      const colorMap = {
-        red: "#ff0000",
-        green: "#00ff00",
-        blue: "#0000ff"
+      // Colores del círculo global
+      const globalColorMap = {
+        free:  "#00ff00", // todo libre
+        full:  "#ff0000", // todo ocupado
+        mixed: "#0000ff"  // parcialmente ocupado
       };
 
       let messageCount = 0;
-      let client = new Paho.MQTT.Client(brokerHost, brokerPort, "webclient_" + Math.random().toString(16).substr(2, 8));
+
+      // Crear cliente MQTT de Paho
+      let client = new Paho.MQTT.Client(
+        brokerHost,
+        brokerPort,
+        "webclient_" + Math.random().toString(16).substr(2, 8)
+      );
 
       client.onConnectionLost = function(responseObject) {
         console.log("Conexión perdida: " + responseObject.errorMessage);
@@ -364,12 +427,64 @@ sudo nano /var/www/html/index.html
 
       client.onMessageArrived = function(message) {
         console.log("Mensaje recibido: " + message.payloadString);
-        const color = message.payloadString.toLowerCase();
+
+        // Incrementamos contador de mensajes
         messageCount++;
-        
-        document.getElementById('colorText').textContent = color;
         document.getElementById('messageCount').textContent = messageCount;
-        document.getElementById('circle').style.background = colorMap[color] || "#222";
+
+        let data;
+        try {
+          data = JSON.parse(message.payloadString);
+        } catch (e) {
+          console.error("Error al parsear JSON:", e);
+          return;
+        }
+
+        const spots = data.spots || [];
+        const totalSpots = spots.length;
+        document.getElementById('totalSpots').textContent = totalSpots;
+
+        // Limpiar contenedor
+        const container = document.getElementById('parkingContainer');
+        container.innerHTML = "";
+
+        // Contar ocupadas y dibujar cada plaza
+        let occupiedCount = 0;
+        spots.forEach(spot => {
+          const div = document.createElement("div");
+          div.className = "spot " + (spot.status === "occupied" ? "occupied" : "free");
+
+          if (spot.status === "occupied") occupiedCount++;
+
+          div.innerHTML = `
+            P${spot.id}<br>
+            <span>${spot.status === "occupied" ? "OCUPADA" : "LIBRE"}</span>
+          `;
+
+          container.appendChild(div);
+        });
+
+        document.getElementById('occupiedCount').textContent = occupiedCount;
+
+        // Actualizar estado global y círculo según ocupación
+        let globalStateText = "---";
+        let circleColor = "#222";
+
+        if (totalSpots > 0) {
+          if (occupiedCount === 0) {
+            globalStateText = "TODO LIBRE";
+            circleColor = globalColorMap.free;
+          } else if (occupiedCount === totalSpots) {
+            globalStateText = "PARQUEADERO LLENO";
+            circleColor = globalColorMap.full;
+          } else {
+            globalStateText = "OCUPACIÓN PARCIAL";
+            circleColor = globalColorMap.mixed;
+          }
+        }
+
+        document.getElementById('globalState').textContent = globalStateText;
+        document.getElementById('circle').style.background = circleColor;
       };
 
       const connectOptions = {
@@ -386,7 +501,8 @@ sudo nano /var/www/html/index.html
         },
         onFailure: function(error) {
           console.log("Error de conexión: " + error.errorMessage);
-          document.getElementById('status').textContent = "Fallo la conexión MQTT: " + error.errorMessage;
+          document.getElementById('status').textContent =
+            "Falló la conexión MQTT: " + error.errorMessage;
           document.getElementById('status').className = "disconnected";
         }
       };
@@ -404,7 +520,7 @@ sudo nano /var/www/html/index.html
 * Ir a ```http://IP_PUBLICA_SERVER/index.html ```
 * Debería mostrar la página con estado "Conectando a MQTT..."
 
-## Parte 4: Configuración del Proyecto ESP32
+## 4. Configuración del Proyecto ESP32
 
 #### 4.1 Prerequisitos
 
@@ -429,27 +545,24 @@ main/
 Editar `main/station_example_main.c` y cambiar las siguientes líneas:
 
 ```c
-// Configuración WiFi - CAMBIAR POR TUS DATOS
+// Configuración WiFi - CAMBIAR POR SUS DATOS
 #define EXAMPLE_ESP_WIFI_SSID      "RED_WIFI"
 #define EXAMPLE_ESP_WIFI_PASS      "PASSWORD_WIFI"
 
-// Configuración MQTT - CAMBIAR POR TU IP
+// Configuración MQTT - CAMBIAR POR SU IP
 #define MQTT_BROKER_URL "mqtt://_IP_PUBLICA_SERVER:1883"
 ```
 
-⚠️ **IMPORTANTE**: Reemplazar:
-- `RED_WIFI`: Nombre de tu red WiFi
-- `PASSWORD_WIFI`: Contraseña de tu red WiFi  
-- `IP_PUBLICA_SERVER`: IP pública de tu servidor AWS EC2
+**IMPORTANTE**: Reemplazar:
+- `RED_WIFI`: Nombre de su red WiFi
+- `PASSWORD_WIFI`: Contraseña de su red WiFi  
+- `IP_PUBLICA_SERVER`: IP pública de su servidor AWS EC2
 
 #### 4.4 Compilar y Flashear
 
 ```bash
 # Configurar target para ESP32-C6
 idf.py set-target esp32c6
-
-# Configurar proyecto (opcional)
-idf.py menuconfig
 
 # Compilar
 idf.py build
@@ -463,7 +576,7 @@ idf.py monitor
 
 #### 4.5 Configuración de Red (opcional)
 
-Si prefieres configurar WiFi mediante menuconfig:
+Si prefiere configurar WiFi mediante menuconfig:
 
 ```bash
 idf.py menuconfig
@@ -475,56 +588,116 @@ Navegar a: **Example Configuration** y establecer:
 
 ---
 
-## 🧪 Verificación del Sistema
+##  Verificación del Sistema
 
 ### 1. Verificar ESP32
 
-**En el monitor serial (`idf.py monitor`) deberías ver:**
+**En el monitor serial (`idf.py monitor`) en serial monitor debería ver:**
 ```
-I (2450) ESP32_MQTT_LED: Connected to WiFi SSID:RED_WIFI
-I (2460) ESP32_MQTT_LED: Got IP: 192.168.x.x
-I (2470) ESP32_MQTT_LED: MQTT Broker: mqtt://IP_PUBLICA_SERVER:1883
-I (2890) ESP32_MQTT_LED: MQTT Connected
-I (2900) LED: Color: ROJO REAL - LED RGB encendido por 3 segundos
-I (5910) LED: Color: VERDE REAL - LED RGB encendido por 3 segundos
-I (8920) LED: Color: AZUL REAL - LED RGB encendido por 3 segundos
+---- Opened the serial port COM12 ----
+I (18161) LED: Encendiendo LED RGB color: green
+I (18161) PARKING: Publicado mensaje 5, msg_id=30740: {"device_id":"esp32c6_parking_1","msg_id":5,"spots":[{"id":1,"status":"free"},{"id":2,"status":"free"},{"id":3,"status":"free"},{"id":4,"status":"free"}]}
+I (21171) LED: Encendiendo LED RGB color: green
+I (21171) PARKING: Publicado mensaje 6, msg_id=38530: {"device_id":"esp32c6_parking_1","msg_id":6,"spots":[{"id":1,"status":"free"},{"id":2,"status":"free"},{"id":3,"status":"free"},{"id":4,"status":"free"}]}
+I (24181) LED: Encendiendo LED RGB color: green
+I (24181) PARKING: Publicado mensaje 7, msg_id=62060: {"device_id":"esp32c6_parking_1","msg_id":7,"spots":[{"id":1,"status":"free"},{"id":2,"status":"free"},{"id":3,"status":"free"},{"id":4,"status":"free"}]}
+
 ```
+
+![Untitled](./img/Serial.png)
+
+**debe comprobar:**
+
+El ESP32-C6:
+
+- Se conecta correctamente al WiFi (SSID y IP obtenida).
+- Se conecta al broker MQTT sin errores.
+
+Cada ~3 segundos:
+
+- Se simula algún cambio en las plazas (Plaza X ahora está OCUPADA/LIBRE).
+- Se publica un JSON en el topic esp32/parking con el estado de todas las plazas.
 
 **LED RGB físico debe:**
-- Cambiar colores cada 3 segundos: Rojo → Verde → Azul
-- Mostrar colores puros y brillantes
 
-### 2. Verificar Servidor MQTT
+El LED actúa como indicador global del parqueadero:
+
+- Verde → Todas las plazas libres.
+- Rojo → Parqueadero lleno (todas ocupadas).
+- Azul → Ocupación parcial (unas libres y otras ocupadas).
+
+
+### 2. Verificar Servidor MQTT (Mosquitto en AWS)
+
+En el servidor AWS (donde corre Mosquitto), suscríbetase al topic del parqueadero:
 
 ```bash
-# En el servidor AWS, monitorear mensajes en tiempo real
-mosquitto_sub -h localhost -t esp32/led -u esp32 -P 12345678
+# En el servidor AWS, monitorear mensajes en tiempo real del parqueadero
+mosquitto_sub -h localhost -t esp32/parking -u esp32 -P esp32
 ```
 
-**Deberías ver:**
+**Debería ver mensajes JSON como:**
 ```
-red
-green
-blue
-red
-green
-blue
+{"device_id":"esp32c6_parking_1","msg_id":1,"spots":[{"id":1,"status":"free"},{"id":2,"status":"free"},{"id":3,"status":"free"},{"id":4,"status":"free"}]}
+{"device_id":"esp32c6_parking_1","msg_id":2,"spots":[{"id":1,"status":"free"},{"id":2,"status":"free"},{"id":3,"status":"free"},{"id":4,"status":"free"}]}
+{"device_id":"esp32c6_parking_1","msg_id":3,"spots":[{"id":1,"status":"free"},{"id":2,"status":"free"},{"id":3,"status":"free"},{"id":4,"status":"free"}]}
 ...
 ```
 
-### 3. Verificar Página Web
+![Untitled](./img/mosquitto.png)
 
-- Ir a `http://TU_IP_PUBLICA/index.html`
-- **Estado**: "Conectado a MQTT" (verde)
-- **Círculo**: Debe cambiar de color sincronizado con el ESP32
-- **Contador**: Debe incrementar con cada mensaje
-- **Color actual**: Debe mostrar "red", "green", "blue"
+**Debe comprobar:**
 
----
+- Llegan mensajes cada ~3 segundos.
+- El campo msg_id va incrementando.
+- Los estados status cambian entre "free" y "occupied" de forma coherente.
 
+### 3. Verificar Página Web (Gemelo Digital de Parqueadero)
 
+**3.1 Abrir en el navegador:**
 
-## 📊 Diagrama de Flujo del Sistema
+```
+http://TU_IP_PUBLICA/index.html
+```
+
+**3.2 En la página debería ver:**
+
+- **Estado MQTT:**
+   - Texto "Conectado a MQTT" en color verde.
+
+- **Indicador global (círculo):**
+   - Verde cuando todas las plazas están libres.
+   - Rojo cuando todas están ocupadas.
+   - Azul cuando hay ocupación parcial.
+
+- **Resumen numérico:**
+   - Plazas ocupadas: X / Y
+   - Mensajes recibidos: N (debe ir aumentando).
+
+- **Tarjetas de plazas:**
+
+Cada plaza aparece como un recuadro
+
+ - Verde y texto LIBRE cuando status = "free"
+ - Rojo y texto OCUPADA cuando status = "occupied".
+
+### **Comportamiento esperado:**
+
+- Cada vez que el ESP32-C6 publica un nuevo JSON:
+   - El contador de “Mensajes recibidos” aumenta.
+   - Algunas plazas cambian de color/estado (simulación de entrada/salida de vehículos).
+   - El círculo global actualiza su color según la cantidad de plazas ocupadas.
+
+### **Ejemplo de evento 4 plazas ocupadas**
+![Untitled](./img/ocupadaRojo.png)
+
+### **Ejemplo de evento 3 plazas libres y 1 ocupada**
+![Untitled](./img/parcialAzul.png)
+
+### **Ejemplo de evento 4 plazas libres**
+![Untitled](./img/LibreVerde.png)
+ 
+## Diagrama de Flujo del Sistema
 
 ```
 Inicio
@@ -533,23 +706,28 @@ Inicializar NVS
   ↓
 Conectar WiFi
   ↓
-Inicializar LED RGB
+Inicializar LED RGB (indicador global del parqueadero)
   ↓
 Conectar MQTT
   ↓
-Crear Tarea LED
+Crear Tarea de Parqueadero
   ↓
-Loop infinito:
-  ├─ Cambiar color LED (rojo/verde/azul)
-  ├─ Publicar color por MQTT
-  ├─ Esperar 3 segundos
-  ├─ Apagar LED brevemente
-  └─ Repetir con siguiente color
+Loop infinito (tarea de parqueadero):
+├─ Simular estado de las plazas (libre/ocupado)
+├─ Actualizar LED RGB según ocupación:
+│ - Verde → todas libres
+│ - Rojo → todas ocupadas
+│ - Azul → ocupación parcial
+├─ Construir mensaje JSON con:
+│ - device_id
+│ - msg_id (contador de mensajes)
+│ - listado de plazas: id + status (free/occupied)
+├─ Publicar JSON por MQTT en el topic esp32/parking
+├─ Esperar 3 segundos
+└─ Repetir ciclo
 ```
 
 ---
-
-
 
 ### Servidor
 - **Cloud Provider**: AWS EC2
