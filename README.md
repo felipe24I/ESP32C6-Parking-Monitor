@@ -29,8 +29,14 @@ A partir de esa base se realizaron cambios en la lógica, en el manejo de MQTT y
 - **Página Web** con visualización en tiempo real
 
 ##  Arquitectura IoT
-
-![parking_monitor (2)](https://github.com/user-attachments/assets/ab077ebc-2ec0-4298-a759-c949b297178a)
+```bash
+ESP32-C6 ──(WiFi)──> Internet ──> AWS EC2 Server
+    │                                │
+    └─ LED RGB WS2812               ├─ Mosquitto MQTT (puerto 1883)
+                                    ├─ WebSocket MQTT (puerto 9001)
+                                    └─ Apache Web (puerto 80)
+                                           └─ Página Web
+```
 
 En la arquitectura IoT, el ESP32-C6 actúa como cliente MQTT conectado por WiFi al router, el cual da acceso a un servidor AWS EC2 que aloja el broker Mosquitto y el servidor web Apache2. El dashboard web se sirve vía HTTP y se comunica en tiempo real con el broker mediante MQTT sobre WebSocket
 
