@@ -21,8 +21,8 @@
 
 - ESP-IDF instalado (versión compatible con tu proyecto).  
 - Python 3.9+ (requerido por `idf.py`).  
-- VSCode con extensión ESP-IDF (opcional, para edición y depuración).  
-- ESP32C6 para flasheo (opcional si solo quieres compilar).
+- VSCode con extensión ESP-IDF.  
+- ESP32C6 para flasheo.
 
 ## Cómo compilar
 
