@@ -9,6 +9,49 @@
 **Departamento:** Departamento de Ingeniería Electrica, Electronica y Computacion
 
 ---
+## Estructura del repo
+
+- `main/` → Código fuente principal (aplicación).  
+- `img/` → Recursos de imágenes.  
+- `CMakeLists.txt` → Configuración de compilación de CMake.  
+- `sdkconfig.defaults` → Configuración base para ESP-IDF.  
+- `.gitignore` → Ignora archivos generados automáticamente.
+
+## Requisitos
+
+- ESP-IDF instalado (versión compatible con tu proyecto).  
+- Python 3.9+ (requerido por `idf.py`).  
+- VSCode con extensión ESP-IDF (opcional, para edición y depuración).  
+- ESP32C6 para flasheo (opcional si solo quieres compilar).
+
+## Cómo compilar
+
+1. Clona el repo:
+
+```bash
+git clone <URL_DEL_REPO>
+cd ESP32C6-Parking-Monitor
+```
+2. Configura ESP-IDF:
+
+```bash
+idf.py set-target esp32c6
+idf.py menuconfig
+```
+Aquí puedes ajustar configuraciones si lo deseas. Se usarán los valores de sdkconfig.defaults por defecto.
+
+3. Compila el proyecto:
+```bash
+idf.py build
+```
+4. Flashea el firmware al ESP32C6:
+```bash
+idf.py flash
+idf.py monitor
+```
+Con esto podrás ver logs en tiempo real desde el ESP32C6.
+
+---
 
 ## Descripción de la práctica
 
