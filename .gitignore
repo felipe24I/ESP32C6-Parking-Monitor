@@ -1,10 +1,30 @@
-build/
-.devcontainer/
-.vscode/
-.ci/
-managed_components/
+# Build artifacts
+/build/
+/managed_components/
 sdkconfig
 sdkconfig.old
-build/
+*.flash_args
+*.bootloader-flash_args
+flash_args.in
+bootloader-prefix
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+*.ninja
+cmake_install.cmake
+
+# IDE / Editor
+.vscode/
 CMakeLists.txt.user
-index.html
+.devcontainer/
+
+# CI
+.ci/
+sdkconfig.ci*
+
+# Logs / temporales
+*.log
+*.tmp
+
+# Otros
+index.html  # solo si es un archivo temporal y no parte del proyecto
